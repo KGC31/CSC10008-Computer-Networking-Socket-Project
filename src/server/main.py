@@ -1,36 +1,39 @@
-import socket 
+import socket
+import threading
 
-# Define network address for server
-HOST = '127.0.0.1'  
-PORT = 8000 
+HOST="127.0.0.1"
+PORT=12345
 
-# Init socket for server that listens at most n clients
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((HOST, PORT))
-s.listen(2)
+def handle_client(client_socket, client_address):
+    print(f"Connected to client: {client_address}")
+    try:
+        while True:
+            data = client_socket.recv(1024)
+            if not data:
+                break
+            print(f"Received from {client_address}: {data.decode()}")
+            client_socket.sendall(data)
+    except ConnectionResetError:
+        print(f"Connection with {client_address} was reset.")
+    finally:
+        client_socket.close()
+        print(f"Connection with {client_address} closed.")
 
-def main():
-    while True:
-        client, addr = s.accept()
-        
-        try:
-            print('Connected by', addr)
-            while True:
-                data = client.recv(1024)
-                str_data = data.decode("utf8")
-                if str_data == "quit":
-                    break
-                """if not data:
-                    break
-                """
-                print("Client: " + str_data)
+def start_server():
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((HOST, PORT))
+    server_socket.listen(5)
+    print("Server started and listening for connections...")
 
-                msg = input("Server: ")
-                    
-        finally:
-            client.close()
+    try:
+        while True:
+            client_socket, client_address = server_socket.accept()
+            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address))
+            client_thread.start()
+    except KeyboardInterrupt:
+        print("\nServer is shutting down...")
+    finally:
+        server_socket.close()
 
-    s.close()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    start_server()
