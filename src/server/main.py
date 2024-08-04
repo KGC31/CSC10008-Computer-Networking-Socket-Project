@@ -1,39 +1,83 @@
 import socket
 import threading
+import os
+import json
+import hashlib
 
-HOST="127.0.0.1"
-PORT=12345
+# Server configuration
+HOST = '192.168.56.1'
+PORT = 12345
+CHUNK_SIZE = 1024
 
-def handle_client(client_socket, client_address):
-    print(f"Connected to client: {client_address}")
-    try:
-        while True:
-            data = client_socket.recv(1024)
+# Load the file list from server_files.txt
+def load_file_list():
+    file_list = {}
+    with open('server_files.txt', 'r') as file:
+        for line in file:
+            parts = line.strip().split()
+            if len(parts) == 2:
+                filename, size = parts
+                file_list[filename] = {'size': size}
+    return file_list
+
+# Generate checksum for data
+def generate_checksum(data):
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
+
+# Handle client connection
+def handle_client(conn, addr, file_list):
+    print(f'Connected by {addr}')
+    
+    # Send the file list to the client
+    conn.sendall(json.dumps(file_list).encode())
+
+    while True:
+        try:
+            data = conn.recv(1024)
             if not data:
                 break
-            print(f"Received from {client_address}: {data.decode()}")
-            client_socket.sendall(data)
-    except ConnectionResetError:
-        print(f"Connection with {client_address} was reset.")
-    finally:
-        client_socket.close()
-        print(f"Connection with {client_address} closed.")
+            request = json.loads(data.decode())
+            if request.get('action') == 'download':
+                files_to_download = request['files']
 
-def start_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((HOST, PORT))
-    server_socket.listen(5)
-    print("Server started and listening for connections...")
+                # Sort the files to download by priority in descending order
+                files_to_download.sort(key=lambda x: x['priority'], reverse=True)
 
-    try:
+                for file_info in files_to_download:
+                    filename = file_info['name']
+                    if filename in file_list:
+                        file_path = f'{filename}'
+                        file_size = os.path.getsize(file_path)
+
+                        # Send start of file marker
+                        conn.sendall(json.dumps({'type': 'start', 'filename': filename, 'size': file_size}).encode())
+
+                        with open(file_path, 'rb') as f:
+                            while chunk := f.read(CHUNK_SIZE):
+                                checksum = generate_checksum(chunk)
+                                conn.sendall(json.dumps({'type': 'chunk', 'filename': filename, 'chunk': chunk.decode('latin1'), 'checksum': checksum}).encode())
+
+                        # Send end of file marker
+                        conn.sendall(json.dumps({'type': 'end', 'filename': filename}).encode())
+                    else:
+                        conn.sendall(json.dumps({'type': 'error', 'message': f'{filename} not found'}).encode())
+        except Exception as e:
+            print(f'Error: {e}')
+            break
+                    
+    conn.close()
+
+# Main server function
+def main():
+    file_list = load_file_list()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen()
+        print(f'Server listening on {HOST}:{PORT}')
+        
         while True:
-            client_socket, client_address = server_socket.accept()
-            client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address))
-            client_thread.start()
-    except KeyboardInterrupt:
-        print("\nServer is shutting down...")
-    finally:
-        server_socket.close()
+            conn, addr = s.accept()
+            threading.Thread(target=handle_client, args=(conn, addr, file_list)).start()
 
 if __name__ == "__main__":
-    start_server()
+    main()
