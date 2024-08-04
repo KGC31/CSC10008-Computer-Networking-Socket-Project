@@ -6,7 +6,7 @@ from tqdm import tqdm
 import hashlib
 
 # Client config
-HOST = "192.168.56.1"
+HOST = "127.0.0.1"
 PORT = 12345
 CHUNK_SIZE = 1024
 INPUT_FILE = 'input.txt'
