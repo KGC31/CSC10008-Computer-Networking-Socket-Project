@@ -2,7 +2,7 @@ import socket
 
 HOST="127.0.0.1"
 PORT=12345
-
+xinxin
 def start_client():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
