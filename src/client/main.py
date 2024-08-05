@@ -5,6 +5,7 @@ import time
 from tqdm import tqdm
 import hashlib
 
+queue = []
 # Client config
 HOST = "192.168.56.1"
 PORT = 12345
