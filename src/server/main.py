@@ -8,6 +8,7 @@ import hashlib
 HOST = '192.168.56.1'
 PORT = 12345
 CHUNK_SIZE = 1024
+FILES_DIR = 'files'  # Directory containing the files to be sent
 
 # Load the file list from server_files.txt
 def load_file_list():
@@ -37,6 +38,9 @@ def handle_client(conn, addr, file_list):
             if not data:
                 break
             request = json.loads(data.decode())
+            if request.get('action') == 'shutdown':
+                print(f'Client {addr} is shutting down.')
+                break
             if request.get('action') == 'download':
                 files_to_download = request['files']
 
@@ -46,21 +50,24 @@ def handle_client(conn, addr, file_list):
                 for file_info in files_to_download:
                     filename = file_info['name']
                     if filename in file_list:
-                        file_path = f'{filename}'
-                        file_size = os.path.getsize(file_path)
+                        file_path = os.path.join(FILES_DIR, filename)
+                        if os.path.exists(file_path):
+                            file_size = os.path.getsize(file_path)
 
-                        # Send start of file marker
-                        conn.sendall(json.dumps({'type': 'start', 'filename': filename, 'size': file_size}).encode())
+                            # Send start of file marker
+                            conn.sendall(json.dumps({'type': 'start', 'filename': filename, 'size': file_size}).encode())
 
-                        with open(file_path, 'rb') as f:
-                            while chunk := f.read(CHUNK_SIZE):
-                                checksum = generate_checksum(chunk)
-                                conn.sendall(json.dumps({'type': 'chunk', 'filename': filename, 'chunk': chunk.decode('latin1'), 'checksum': checksum}).encode())
+                            with open(file_path, 'rb') as f:
+                                while chunk := f.read(CHUNK_SIZE):
+                                    checksum = generate_checksum(chunk)
+                                    conn.sendall(json.dumps({'type': 'chunk', 'filename': filename, 'chunk': chunk.decode('latin1'), 'checksum': checksum}).encode())
 
-                        # Send end of file marker
-                        conn.sendall(json.dumps({'type': 'end', 'filename': filename}).encode())
+                            # Send end of file marker
+                            conn.sendall(json.dumps({'type': 'end', 'filename': filename}).encode())
+                        else:
+                            conn.sendall(json.dumps({'type': 'error', 'message': f'{filename} not found in {FILES_DIR}'}).encode())
                     else:
-                        conn.sendall(json.dumps({'type': 'error', 'message': f'{filename} not found'}).encode())
+                        conn.sendall(json.dumps({'type': 'error', 'message': f'{filename} not found in file list'}).encode())
         except Exception as e:
             print(f'Error: {e}')
             break
@@ -74,7 +81,7 @@ def main():
         s.bind((HOST, PORT))
         s.listen()
         print(f'Server listening on {HOST}:{PORT}')
-        
+
         while True:
             conn, addr = s.accept()
             threading.Thread(target=handle_client, args=(conn, addr, file_list)).start()
