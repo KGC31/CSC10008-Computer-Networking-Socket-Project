@@ -3,6 +3,10 @@ import socket
 HOST="127.0.0.1"
 PORT=12345
 
+def send_file(filename, client_socket):
+    with open(filename, 'rb') as f:
+        while (chunk := f.read(1024)):
+            client_socket.sendall(chunk)
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((HOST, PORT))
@@ -14,12 +18,14 @@ def start_server():
             client_socket, client_address = server_socket.accept()
             print(f"Connected to client: {client_address}")
             try:
-                while True:
-                    data = client_socket.recv(1024)
-                    if not data:
-                        break
-                    print(f"Received from {client_address}: {data.decode()}")
-                    client_socket.sendall(data)
+                filename = client_socket.recv(1024)
+                if not filename:
+                    break
+                print(f"Received from {client_address}: {filename.decode()}")
+                print(filename)
+                send_file(filename.decode(),client_socket)
+                
+                    
             except ConnectionResetError:
                 print(f"Connection with {client_address} was reset.")
             finally:
