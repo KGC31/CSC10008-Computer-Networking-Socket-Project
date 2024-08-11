@@ -9,6 +9,7 @@ import math
 # Client config
 HOST = "192.168.1.172"
 PORT = 8000
+
 CHUNK_SIZE = 1024
 INPUT_FILE = 'input.txt'
 OUTPUT_DIR = 'downloads'

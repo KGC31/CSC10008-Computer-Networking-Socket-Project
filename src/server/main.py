@@ -9,6 +9,7 @@ import sys
 # Server configuration
 HOST = '192.168.1.172'
 PORT = 8000
+
 CHUNK_SIZE = 1024
 FILES_DIR = 'test_files'
 
