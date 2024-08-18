@@ -4,7 +4,6 @@ import os
 import time
 from tqdm import tqdm
 import hashlib
-import math
 
 # Client configuration
 HOST = "192.168.1.172"
@@ -102,10 +101,6 @@ def handle_file_download(client_socket, progress_bars):
                         downloaded.append(file_name)
                         progress_bars[file_name].close()
                         queue[:] = [f for f in queue if f['name'] != file_name]
-                    elif response['type'] == 'shutdown':
-                        print("Server is shutting down. Closing connection.")
-                        queue.clear()
-                        return
                     elif response['type'] == 'error':
                         print(response['message'])
                 except json.JSONDecodeError:
@@ -143,6 +138,18 @@ def start_client():
 
                     progress_bars = {}
                     handle_file_download(client_socket, progress_bars)
+            else:
+                try:
+                    # Check if server is shut down
+                    client_socket.settimeout(2.0)
+                    data = client_socket.recv(1024)
+                    if data:
+                        response = json.loads(data.decode())
+                        if response.get('type') == 'shutdown':
+                            print("Server is shutting down. Closing connection.")
+                            break
+                except socket.timeout:
+                    pass
 
             time.sleep(2)
 

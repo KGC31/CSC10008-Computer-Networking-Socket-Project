@@ -5,6 +5,7 @@ import json
 import hashlib
 import signal
 import sys
+import time
 
 # Server configuration
 HOST = '192.168.1.172'
@@ -13,8 +14,9 @@ CHUNK_SIZE = 1024
 FILES_DIR = 'test_files'
 FILES_LIST = 'files_list.txt'
 
-# Flag to signal server shutdown
+# Flags to signal server and download states
 shutdown_flag = threading.Event()
+download_in_progress = threading.Event()
 
 def load_file_list(files_list_path):
     """Load the list of available files from a file."""
@@ -31,6 +33,10 @@ def load_file_list(files_list_path):
     except FileNotFoundError:
         print(f"File {files_list_path} not found.")
     return file_list
+
+def send_file_list(conn, file_list):
+    """Send the list of available files to the client."""
+    conn.sendall(json.dumps(file_list).encode())
 
 def generate_checksum(data):
     """Generate an MD5 checksum for a chunk of data."""
@@ -61,6 +67,7 @@ def send_error(conn, message):
 def handle_file_downloads(conn, queue):
     """Handle the file download requests from the client."""
     file_iters = {}
+    download_in_progress.set()  # Indicate that a download is in progress
 
     # Prepare file iterators
     for file_info in queue:
@@ -96,12 +103,16 @@ def handle_file_downloads(conn, queue):
             else:
                 send_file_chunk(conn, filename, chunk)
 
+    download_in_progress.clear()  # Indicate that the download is complete
+
 def handle_client(conn, addr):
     """Handle the communication with a connected client."""
     print(f'Connected by {addr}')
     file_list = load_file_list(FILES_LIST)
     
-    conn.sendall(json.dumps(file_list).encode())
+    send_file_list(conn, file_list)
+
+    conn.settimeout(1.0)
 
     while not shutdown_flag.is_set():
         try:
@@ -116,6 +127,8 @@ def handle_client(conn, addr):
                 queue = request['files']
                 queue.sort(key=lambda x: x['priority'], reverse=True)
                 handle_file_downloads(conn, queue)
+        except socket.timeout:
+            continue  # Check shutdown_flag again after timeout
         except Exception as e:
             print(f'Error: {e}')
             break
@@ -125,9 +138,16 @@ def handle_client(conn, addr):
                     
     conn.close()
 
+
 def signal_handler(sig, frame):
     """Signal handler to stop the server gracefully."""
     print('\nServer is shutting down...')
+    
+    # Wait for downloads to complete before shutting down
+    while download_in_progress.is_set():
+        print("Waiting for active downloads to complete...")
+        time.sleep(1)
+    
     shutdown_flag.set()  # Set the shutdown flag
     sys.exit(0)
 
